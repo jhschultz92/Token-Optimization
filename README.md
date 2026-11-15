@@ -4,59 +4,72 @@ A small, standalone setup that keeps Claude Code from loading big files into you
 main conversation. Big files use up context (tokens) fast. With this setup, Claude
 hands that reading to a cheaper helper ("subagent") that replies with just the answer.
 
-No accounts, servers or outside services are needed. It's three files plus Python.
+No accounts, servers, outside services or Python needed.
+
+## Pick your path
+
+First, check whether your computer has **Node.js**. Open a terminal (Mac: the **Terminal**
+app; Windows: **PowerShell**), type this and press Enter:
+
+```
+node --version
+```
+
+- **If you see a version number like `v20.11.0`**, use **Path A**. It strictly enforces the rule.
+- **If you see "command not found" or "not recognized"**, use **Path B**. It needs no
+  programs at all, but works by instruction, so Claude follows it most of the time
+  rather than every time.
 
 ## What's inside
 
-| File | What it does |
-|---|---|
-| `.claude/agents/bulk-reader.md` | The **subagent**. Runs on the Haiku model, can only read and search, and replies briefly with file paths and line numbers. |
-| `.claude/hooks/block_large_reads.py` | The **hook**. Before every file read, it checks the size. If the main session tries to read more than 400 lines of a big file at once, it blocks the read and tells Claude to use `bulk-reader` or read a smaller section. Images, PDFs and notebooks are never blocked. |
-| `.claude/settings.json` | Tells Claude Code to run the hook before every Read. |
-| `tests/test_block_large_reads.py` | Automatic checks that the hook behaves correctly. |
+| File | What it does | Used in |
+|---|---|---|
+| `.claude/agents/bulk-reader.md` | The **subagent**. Runs on the Haiku model, can only read and search, and replies briefly with file paths and line numbers. | A and B |
+| `.claude/hooks/block_large_reads.js` | The **hook**. Before every file read, it checks the size. If the main session tries to read more than 400 lines of a big file at once, it blocks the read and points Claude to `bulk-reader`. Images, PDFs and notebooks are never blocked. | A |
+| `.claude/settings.json` | Tells Claude Code to run the hook before every Read. | A |
+| `no-code-option/CLAUDE.md` | Plain-English rules telling Claude to use `bulk-reader` for big files. | B |
+| `tests/block_large_reads.test.js` | Automatic checks that the hook behaves correctly. | A (optional) |
 
-## Setup, step by step
+## Download
 
-You need **Claude Code** and **Python 3** installed.
-To check Python, open a terminal and type `python3 --version`. You should see a version number.
+1. On GitHub, open this repo and choose this branch in the branch dropdown (top left).
+2. Click the green **Code** button, then **Download ZIP**, and unzip it.
+3. The `.claude` folder is hidden. On Mac, press `Cmd+Shift+.` in Finder to show it.
+   On Windows, in File Explorer choose **View**, then **Show**, then **Hidden items**.
 
-### Option A: Use it in one project
+## Path A: hook + subagent (needs Node.js)
 
-1. Download this repo. On GitHub, click the green **Code** button, then **Download ZIP**, and unzip it.
-2. Find the `.claude` folder inside. It's hidden on Mac and Linux: press `Cmd+Shift+.` in Finder to show hidden files.
-3. Copy the `.claude` folder into the top level of your own project folder.
+1. Copy the whole `.claude` folder into the top level of your own project folder.
    - **If your project already has a `.claude` folder:** copy `agents/bulk-reader.md` and
-     `hooks/block_large_reads.py` into it. Then open your existing `.claude/settings.json`
-     and add the `"hooks": { ... }` section from this repo's `settings.json`. Don't
-     replace your whole file.
-4. Restart Claude Code in that project.
-5. Type `/agents`. You should see `bulk-reader` in the list.
-6. Type `/hooks`. You should see a `PreToolUse` hook for `Read`.
+     `hooks/block_large_reads.js` into the matching folders. Then open your existing
+     `.claude/settings.json` and add the `"hooks": { ... }` section from this repo's
+     `settings.json`. Don't replace your whole file.
+2. Restart Claude Code in that project.
+3. Type `/agents`. You should see `bulk-reader`.
+4. Type `/hooks`. You should see a `PreToolUse` hook for `Read`.
 
-### Option B: Use it in every project
+## Path B: subagent + instructions (no programs needed)
 
-1. Copy `bulk-reader.md` to `~/.claude/agents/`, and `block_large_reads.py` to `~/.claude/hooks/`.
-   (`~` means your home folder.)
-2. Put the `hooks` section in `~/.claude/settings.json`, and change
-   `$CLAUDE_PROJECT_DIR` to `$HOME` in the command line.
-3. Restart Claude Code.
+1. In your project folder, make a folder called `.claude`, and inside it a folder called `agents`.
+2. Copy `.claude/agents/bulk-reader.md` into `your-project/.claude/agents/`.
+   (Do **not** copy `settings.json` or the `hooks` folder. They need Node.js.)
+3. Copy the text from `no-code-option/CLAUDE.md`:
+   - If your project has no `CLAUDE.md` file at its top level, copy this file there.
+   - If it already has one, paste the text at the end of your existing file.
+4. Restart Claude Code in that project and type `/agents`. You should see `bulk-reader`.
 
 ## Check that it works
 
-From this repo's folder, run:
+Ask Claude Code to "read the whole file X" for a file over 400 lines.
+- **Path A:** the read gets blocked, and Claude switches to `bulk-reader`.
+- **Path B:** Claude should use `bulk-reader` or read only a section, without being blocked.
 
-```
-python3 -m unittest discover tests -v
-```
+For Path A, you can also run the automatic tests from this repo's folder with `node --test`.
+Every test should pass.
 
-Every line should end in `ok`.
+## Settings you can change (Path A)
 
-To try it live, ask Claude Code to "read the whole file X" for a file over 400 lines.
-You should see the read get blocked, and Claude should switch to the `bulk-reader` subagent.
-
-## Settings you can change
-
-Set these as environment variables (for example in the `"env"` section of `settings.json`):
+Set these in the `"env"` section of `settings.json`, for example `"env": { "BULK_READ_MAX_LINES": "600" }`:
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -69,5 +82,5 @@ Set these as environment variables (for example in the `"env"` section of `setti
 - If the hook itself fails (bad input, unreadable file), it **allows** the read, so it can never lock Claude up.
 - Newer Claude Code versions tell the hook which subagent is reading. Older ones don't.
   Either way, `bulk-reader` gets through, because it reads in chunks of 400 lines or fewer.
-- The main session can still read a big file in many small chunks. If you see that
-  happening a lot, lower `BULK_READ_CHUNK_LIMIT`.
+- The main session can still read a big file in many small chunks. If that happens a lot,
+  lower `BULK_READ_CHUNK_LIMIT`.
